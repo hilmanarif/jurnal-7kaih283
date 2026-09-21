@@ -1,0 +1,157 @@
+<!-- ============ MODAL: GENERIC HABIT ============ -->
+<div class="modal fade" id="modalHabit" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title fw-bold" id="habit-modal-title">Isi Jurnal</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <form id="form-dynamic-habit">
+                    <input type="hidden" id="habit-type" name="type">
+                    <div class="mb-3"><label class="form-label">Tanggal Pelaksanaan</label><input type="date" class="form-control" name="tgl" id="habit-date" required></div>
+                    <div class="mb-4"><label class="form-label" id="habit-input-label">Detail</label><input type="text" class="form-control" name="detail1" id="habit-detail-input" required></div>
+                    <button type="submit" class="btn btn-primary w-100" id="btn-save-habit">Simpan Jurnal</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============ MODAL: IBADAH ============ -->
+<div class="modal fade" id="modalIbadah" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title fw-bold">✨ Beribadah</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <form id="form-ibadah">
+                    <div class="mb-3"><label class="form-label">Tanggal Pelaksanaan</label><input type="date" class="form-control" id="ibadah-date" required></div>
+                    <div class="mb-3"><label class="form-label fw-bold">Agama Anda</label>
+                        <div id="religion-selector" class="religion-grid"></div>
+                    </div>
+                    <div id="ibadah-dynamic-container" class="mb-4"></div>
+                    <button type="submit" class="btn btn-primary w-100" id="btn-save-ibadah">Simpan Ibadah</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============ MODAL: TAMBAH SISWA ============ -->
+<div class="modal fade" id="modalAddSiswa" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title fw-bold">+ Tambah Siswa Baru</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <form id="form-admin-add-siswa">
+                    <div class="mb-3"><label class="form-label">Nama Lengkap</label><input type="text" class="form-control" name="nama" required></div>
+                    <div class="mb-3"><label class="form-label">Username (huruf kecil, tanpa spasi)</label><input type="text" class="form-control" name="username" required pattern="[a-z0-9]+" title="Huruf kecil dan angka saja, tanpa spasi"></div>
+                    <div class="mb-3"><label class="form-label">Password</label><input type="text" class="form-control" name="password" value="123"></div>
+                    <div class="mb-3"><label class="form-label">Kelas</label><input type="text" class="form-control" name="kelas"></div>
+                    <div class="mb-3"><label class="form-label">Cita-cita</label><input type="text" class="form-control" name="cita_cita"></div>
+                    <div class="mb-3"><label class="form-label">Agama</label>
+                        <select class="form-select" name="agama">
+                            <option value="">-- Pilih Agama --</option>
+                            <option value="Islam">Islam</option>
+                            <option value="Kristen">Kristen</option>
+                            <option value="Katolik">Katolik</option>
+                            <option value="Hindu">Hindu</option>
+                            <option value="Buddha">Buddha</option>
+                            <option value="Konghucu">Konghucu</option>
+                            <option value="Kepercayaan">Kepercayaan</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Simpan</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============ MODAL: EDIT SISWA ============ -->
+<div class="modal fade" id="modalEditSiswa" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title fw-bold">✏️ Edit Data Siswa</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <form id="form-edit-siswa">
+                    <input type="hidden" id="edit-siswa-username" name="username">
+                    <div class="mb-3"><label class="form-label">Nama Lengkap</label><input type="text" class="form-control" id="edit-siswa-nama" name="nama" required></div>
+                    <div class="mb-3"><label class="form-label">Kelas</label><input type="text" class="form-control" id="edit-siswa-kelas" name="kelas"></div>
+                    <div class="mb-3"><label class="form-label">Cita-cita</label><input type="text" class="form-control" id="edit-siswa-cita" name="cita_cita"></div>
+                    <div class="mb-3"><label class="form-label">Agama</label>
+                        <select class="form-select" id="edit-siswa-agama" name="agama">
+                            <option value="">-- Pilih --</option><option value="Islam">Islam</option><option value="Kristen">Kristen Protestan</option>
+                            <option value="Katolik">Katolik</option><option value="Hindu">Hindu</option><option value="Buddha">Buddha</option>
+                            <option value="Konghucu">Konghucu</option><option value="Kepercayaan">Kepercayaan</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">Simpan Perubahan</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============ MODAL: RESET PASSWORD ============ -->
+<div class="modal fade" id="modalResetPass" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title fw-bold">🔑 Reset Password</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <form id="form-reset-password">
+                    <input type="hidden" id="reset-pass-username" name="username">
+                    <p class="small text-muted">Siswa: <strong id="reset-pass-nama"></strong></p>
+                    <div class="mb-3"><label class="form-label">Password Baru</label><input type="text" class="form-control" id="reset-pass-value" name="new_pass" required value="123" placeholder="Min 3 karakter"></div>
+                    <button type="submit" class="btn btn-primary w-100">Reset Password</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============ MODAL: IMPORT CSV ============ -->
+<div class="modal fade" id="modalImportCSV" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title fw-bold">📤 Import Siswa dari CSV</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <div class="info-alert mb-3">
+                    <span>📌</span>
+                    <div>
+                        <strong>Petunjuk:</strong><br>
+                        • Format: <code>Username,Password,Nama,Kelas,Cita-cita,Agama</code><br>
+                        • Username: huruf kecil tanpa spasi<br>
+                        • Agama: Islam / Kristen / Katolik / Hindu / Buddha / Konghucu / Kepercayaan<br>
+                        • Download template dulu jika belum punya format-nya
+                    </div>
+                </div>
+                <div class="mb-3"><label class="form-label fw-bold">Pilih File CSV</label><input type="file" class="form-control" id="import-csv-file" accept=".csv,.txt"></div>
+                <div id="import-preview-container" class="d-none">
+                    <h6 class="fw-bold mb-2">Preview Data (<span id="import-count">0</span> siswa)</h6>
+                    <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                        <table class="table table-sm table-bordered mb-0">
+                            <thead class="table-light"><tr><th>Username</th><th>Password</th><th>Nama</th><th>Kelas</th><th>Cita-cita</th><th>Agama</th><th>Status</th></tr></thead>
+                            <tbody id="import-preview-body"></tbody>
+                        </table>
+                    </div>
+                    <div id="import-warnings" class="mt-2"></div>
+                    <button class="btn btn-primary w-100 mt-3" id="btn-confirm-import" onclick="confirmImport()">✅ Konfirmasi Import</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ============ MODAL: KONFIRMASI CETAK ============ -->
+<div class="modal fade" id="modalConfirmPrint" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title fw-bold">🖨️ Konfirmasi Cetak</h5><button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body text-center">
+                <p id="confirm-print-text">Apakah Anda yakin ingin mencetak laporan ini?</p>
+                <div class="d-flex gap-2 justify-content-center">
+                    <button class="btn btn-sm" data-bs-dismiss="modal" style="border: 1px solid #e2e8f0; border-radius: 8px;">Batal</button>
+                    <button class="btn btn-sm btn-primary" id="btn-confirm-print-yes">Ya, Cetak</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

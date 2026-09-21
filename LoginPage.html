@@ -1,0 +1,55 @@
+<!-- LOGIN PAGE -->
+<div id="section-login" class="d-none">
+    <div class="login-wrapper">
+        <div class="login-card text-center">
+            <!-- Logo dinamis dari settings -->
+            <div class="login-logo" id="login-logo-container">
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><circle cx="12" cy="8" r="7"></circle><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"></polyline></svg>
+            </div>
+            <h4 style="font-weight: 800; margin-bottom: 0.3rem;">Jurnal 7 Kebiasaan</h4>
+            <p id="login-deskripsi" style="color: var(--text-muted); font-size: 0.85rem; margin-bottom: 1.5rem;">Anak Indonesia Hebat 🇮🇩</p>
+
+            <!-- Login Tabs -->
+            <div class="login-tabs">
+                <button class="login-tab-btn active" onclick="switchLoginTab('siswa', this)">👨‍🎓 Siswa</button>
+                <button class="login-tab-btn" onclick="switchLoginTab('admin', this)">👨‍🏫 Guru/Admin</button>
+            </div>
+
+            <!-- Form Login Siswa -->
+            <div id="login-form-siswa">
+                <form id="form-login-siswa">
+                    <div class="mb-3 text-start">
+                        <label class="form-label">Username</label>
+                        <input type="text" class="form-control" id="input-username-siswa" required placeholder="Ketik username Anda" autocomplete="username">
+                    </div>
+                    <div class="mb-3 text-start">
+                        <label class="form-label">Kata Sandi</label>
+                        <div class="password-wrapper">
+                            <input type="password" class="form-control" id="pass-siswa" required placeholder="Masukkan sandi" autocomplete="current-password">
+                            <button type="button" class="toggle-password" onclick="togglePass('pass-siswa', this)">👁️</button>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100" id="btn-login-siswa">Masuk Sebagai Siswa</button>
+                </form>
+            </div>
+
+            <!-- Form Login Admin -->
+            <div id="login-form-admin" class="d-none">
+                <form id="form-login-admin">
+                    <div class="mb-3 text-start">
+                        <label class="form-label">Username Admin</label>
+                        <input type="text" class="form-control" id="user-admin" required placeholder="Username" autocomplete="username">
+                    </div>
+                    <div class="mb-3 text-start">
+                        <label class="form-label">Kata Sandi</label>
+                        <div class="password-wrapper">
+                            <input type="password" class="form-control" id="pass-admin" required placeholder="Sandi" autocomplete="current-password">
+                            <button type="button" class="toggle-password" onclick="togglePass('pass-admin', this)">👁️</button>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100" id="btn-login-admin">Masuk Sebagai Guru</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>

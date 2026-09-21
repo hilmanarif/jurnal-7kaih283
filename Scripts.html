@@ -1,0 +1,1122 @@
+<script>
+/* =============================================================
+   Scripts.html — Semua JavaScript Client-Side
+   Jurnal 7 Kebiasaan v2.0
+   ============================================================= */
+
+/* ===== GLOBAL STATE ===== */
+let schoolSettings = {};
+let currentUser = null;
+let currentHabits = {};
+let currentAdminUsername = '';
+let adminViewingUser = null;
+let adminViewingHabits = null;
+let adminStudentsList = [];
+let clientIP = "-";
+let selectedReligion = "";
+let parsedImportData = [];
+
+/* ===== UTILITIES ===== */
+function escapeHtml(str) {
+    if (str === null || str === undefined) return '';
+    const d = document.createElement('div'); d.textContent = String(str); return d.innerHTML;
+}
+
+function showToast(msg, type) {
+    const c = document.getElementById('toast-container');
+    const t = document.createElement('div');
+    t.className = 'toast-item toast-' + (type || 'success');
+    t.textContent = msg;
+    c.appendChild(t);
+    setTimeout(() => { t.classList.add('toast-removing'); setTimeout(() => t.remove(), 300); }, 3000);
+}
+
+function togglePass(input, btn) {
+    const el = typeof input === 'string' ? document.getElementById(input) : input;
+    if (!el) return;
+    if (el.type === 'password') { el.type = 'text'; btn.textContent = '🙈'; }
+    else { el.type = 'password'; btn.textContent = '👁️'; }
+}
+
+function setLoadingBtn(id, loading) {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    if (loading) { btn.disabled = true; btn._oldText = btn.textContent; btn.textContent = '⏳ Memproses...'; }
+    else { btn.disabled = false; btn.textContent = btn._oldText || 'Simpan'; }
+}
+
+function todayISO() {
+    const t = new Date(); const o = t.getTimezoneOffset() * 60000;
+    return new Date(t - o).toISOString().split('T')[0];
+}
+
+/* ===== IBADAH DATA (Multi-Agama) ===== */
+const ibadahData = {
+    Islam: { emoji: '☪️', items: ['Shalat Subuh','Shalat Dzuhur','Shalat Ashar','Shalat Maghrib','Shalat Isya','Membaca Al-Quran','Berdoa'] },
+    Kristen: { emoji: '✝️', items: ['Doa Pagi','Membaca Alkitab','Ibadah/Kebaktian','Doa Malam','Memuji Tuhan'] },
+    Katolik: { emoji: '⛪', items: ['Doa Pagi','Membaca Kitab Suci','Misa/Ibadah','Doa Rosario','Doa Malam'] },
+    Hindu: { emoji: '🕉️', items: ['Tri Sandhya Pagi','Tri Sandhya Siang','Tri Sandhya Sore','Sembahyang','Membaca Weda'] },
+    Buddha: { emoji: '☸️', items: ['Meditasi Pagi','Puja Bakti','Membaca Sutta','Meditasi Malam','Dana/Berbagi'] },
+    Konghucu: { emoji: '☯️', items: ['Sembahyang Pagi','Membaca Kitab Suci','Ibadah di Kelenteng','Doa Malam','Berbakti'] },
+    Kepercayaan: { emoji: '🙏', items: ['Meditasi/Semedi','Doa Kepada Tuhan YME','Ritual Adat','Refleksi Diri','Berdoa Malam'] }
+};
+
+/* ===== NAVIGATION ===== */
+function toggleSidebar() {
+    document.querySelector('.sidebar')?.classList.toggle('show');
+    document.querySelector('.sidebar-overlay')?.classList.toggle('show');
+}
+
+function switchLoginTab(tab, btn) {
+    document.querySelectorAll('.login-tab-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('login-form-siswa').classList.toggle('d-none', tab !== 'siswa');
+    document.getElementById('login-form-admin').classList.toggle('d-none', tab !== 'admin');
+}
+
+function switchTab(tabId, btn) {
+    document.querySelectorAll('.tab-pane').forEach(p => { p.classList.add('d-none'); p.classList.remove('fade-in-up'); });
+    const target = document.getElementById(tabId);
+    if (target) { target.classList.remove('d-none'); setTimeout(() => target.classList.add('fade-in-up'), 10); }
+    if (btn) {
+        const container = btn.closest('#menu-siswa-container, #menu-admin-container');
+        if (container) container.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+        btn.classList.add('active');
+    }
+    toggleSidebar();
+    // Load data for specific tabs
+    if (tabId === 'tab-admin-dash') fetchAdminDashboard();
+    if (tabId === 'tab-admin-students') loadAdminStudents();
+}
+
+/* ===== INIT ===== */
+document.addEventListener("DOMContentLoaded", function() {
+    console.log('[INIT] DOMContentLoaded');
+    try {
+        const today = new Date();
+        const yearEl = document.getElementById('admin-report-year');
+        const monthEl = document.getElementById('admin-report-month');
+        if (yearEl) yearEl.value = today.getFullYear();
+        if (monthEl) monthEl.value = today.getMonth() + 1;
+        document.querySelectorAll('input[type="date"]').forEach(inp => inp.value = todayISO());
+    } catch(e) { console.error('[INIT] Date error:', e); }
+
+    // Fetch IP
+    try { fetch('https://api.ipify.org?format=json').then(r=>r.json()).then(d=>{ clientIP = d.ip; }).catch(()=>{}); } catch(e){}
+
+    const loadingTimer = setTimeout(() => {
+        const lt = document.getElementById('loader-text');
+        if (lt) lt.innerHTML = '<div style="background:#fef2f2;padding:1rem;border-radius:10px;border-left:4px solid #ef4444;margin-top:1rem;max-width:400px;text-align:left;font-size:0.85rem;"><strong style="color:#991b1b;">Koneksi ke Server Gagal!</strong><br><span style="color:#64748b;">Pastikan Script sudah di-Deploy ulang dan Spreadsheet terhubung.</span></div>';
+    }, 15000);
+
+    if (typeof google !== 'undefined' && google.script) {
+        google.script.run
+            .withSuccessHandler(function(data) {
+                clearTimeout(loadingTimer);
+                if (data && data.error) {
+                    document.getElementById('loader-text').innerHTML = '<span style="color:#ef4444;font-weight:700;">Gagal: ' + escapeHtml(data.message) + '</span>';
+                    return;
+                }
+                schoolSettings = data.settings || {};
+                applyDynamicLogo();
+                applyLoginDeskripsi();
+                document.getElementById('loader').classList.add('d-none');
+
+                // Auto-login dari sessionStorage jika ada
+                try {
+                    const saved = sessionStorage.getItem('kaih_session');
+                    if (saved) {
+                        const sess = JSON.parse(saved);
+                        if (sess.role === 'siswa' && sess.username && sess.password) {
+                            document.getElementById('loader').classList.remove('d-none');
+                            document.getElementById('section-login').classList.add('d-none');
+                            document.getElementById('loader-text').textContent = 'Mengembalikan sesi...';
+                            google.script.run.withSuccessHandler(function(res) {
+                                document.getElementById('loader').classList.add('d-none');
+                                if (res.success) {
+                                    currentUser = res.user; currentHabits = res.habits;
+                                    selectedReligion = currentUser.agama || '';
+                                    showApp('siswa');
+                                } else {
+                                    sessionStorage.removeItem('kaih_session');
+                                    document.getElementById('section-login').classList.remove('d-none');
+                                }
+                            }).withFailureHandler(function() {
+                                document.getElementById('loader').classList.add('d-none');
+                                sessionStorage.removeItem('kaih_session');
+                                document.getElementById('section-login').classList.remove('d-none');
+                            }).loginSiswa(sess.username, sess.password);
+                            return;
+                        } else if (sess.role === 'admin' && sess.username && sess.password) {
+                            document.getElementById('loader').classList.remove('d-none');
+                            document.getElementById('section-login').classList.add('d-none');
+                            document.getElementById('loader-text').textContent = 'Mengembalikan sesi...';
+                            google.script.run.withSuccessHandler(function(res) {
+                                document.getElementById('loader').classList.add('d-none');
+                                if (res.success) {
+                                    currentAdminUsername = sess.username;
+                                    showApp('admin', res.nama);
+                                } else {
+                                    sessionStorage.removeItem('kaih_session');
+                                    document.getElementById('section-login').classList.remove('d-none');
+                                }
+                            }).withFailureHandler(function() {
+                                document.getElementById('loader').classList.add('d-none');
+                                sessionStorage.removeItem('kaih_session');
+                                document.getElementById('section-login').classList.remove('d-none');
+                            }).loginAdmin(sess.username, sess.password);
+                            return;
+                        }
+                    }
+                } catch(e) { console.warn('Session restore error:', e); }
+
+                document.getElementById('section-login').classList.remove('d-none');
+            })
+            .withFailureHandler(function(err) {
+                clearTimeout(loadingTimer);
+                document.getElementById('loader-text').innerHTML = '<span style="color:#ef4444;font-weight:700;">Gagal: ' + escapeHtml(err.message) + '</span>';
+            })
+            .getInitialData();
+    } else {
+        clearTimeout(loadingTimer);
+        document.getElementById('loader-text').innerHTML = '<div style="background:#fef2f2;padding:1rem;border-radius:10px;border-left:4px solid #ef4444;margin-top:1rem;max-width:400px;text-align:left;font-size:0.85rem;"><strong style="color:#991b1b;">Error: google.script tidak tersedia</strong><br><span style="color:#64748b;">Buka melalui URL Deploy Google Apps Script.</span></div>';
+    }
+});
+
+/* ===== DYNAMIC LOGO & DESKRIPSI ===== */
+function applyDynamicLogo() {
+    const url = schoolSettings.logo_daerah;
+    if (url && url.startsWith('http')) {
+        const loginLogo = document.getElementById('login-logo-container');
+        if (loginLogo) loginLogo.innerHTML = '<img src="' + escapeHtml(url) + '" alt="Logo">';
+        const sidebarLogo = document.getElementById('sidebar-logo-container');
+        if (sidebarLogo) sidebarLogo.innerHTML = '<img src="' + escapeHtml(url) + '" alt="Logo">';
+    }
+}
+function applyLoginDeskripsi() {
+    const d = schoolSettings.deskripsi_login;
+    if (d) {
+        const el = document.getElementById('login-deskripsi');
+        if (el) el.innerHTML = escapeHtml(d).replace(/\n/g, '<br>');
+    }
+}
+
+/* ===== LOGIN HANDLERS ===== */
+document.getElementById('form-login-siswa').onsubmit = function(e) {
+    e.preventDefault();
+    const username = document.getElementById('input-username-siswa').value.trim().toLowerCase();
+    const password = document.getElementById('pass-siswa').value;
+    if (!username) { showToast('Masukkan username!', 'danger'); return; }
+    setLoadingBtn('btn-login-siswa', true);
+    google.script.run.withSuccessHandler(function(res) {
+        setLoadingBtn('btn-login-siswa', false);
+        if (!res.success) { showToast(res.message, 'danger'); return; }
+        currentUser = res.user; currentHabits = res.habits;
+        selectedReligion = currentUser.agama || '';
+        try { sessionStorage.setItem('kaih_session', JSON.stringify({role:'siswa', username:username, password:password})); } catch(e){}
+        showApp('siswa');
+    }).withFailureHandler(function(err) {
+        setLoadingBtn('btn-login-siswa', false);
+        showToast('Error: ' + err.message, 'danger');
+    }).loginSiswa(username, password);
+};
+
+document.getElementById('form-login-admin').onsubmit = function(e) {
+    e.preventDefault();
+    const user = document.getElementById('user-admin').value;
+    const pass = document.getElementById('pass-admin').value;
+    setLoadingBtn('btn-login-admin', true);
+    google.script.run.withSuccessHandler(function(res) {
+        setLoadingBtn('btn-login-admin', false);
+        if (!res.success) { showToast(res.message, 'danger'); return; }
+        currentAdminUsername = res.username || user;
+        try { sessionStorage.setItem('kaih_session', JSON.stringify({role:'admin', username:user, password:pass})); } catch(e){}
+        showApp('admin', res.nama);
+    }).withFailureHandler(function(err) {
+        setLoadingBtn('btn-login-admin', false);
+        showToast('Error: ' + err.message, 'danger');
+    }).loginAdmin(user, pass);
+};
+
+/* ===== SHOW APP ===== */
+function showApp(role, adminName) {
+    document.getElementById('section-login').classList.add('d-none');
+    document.getElementById('section-app').classList.remove('d-none');
+
+    if (role === 'siswa') {
+        document.getElementById('menu-siswa-container').classList.remove('d-none');
+        document.getElementById('menu-admin-container').classList.add('d-none');
+        document.getElementById('sidebar-role-title').textContent = currentUser.nama;
+        document.querySelectorAll('.current-user-name').forEach(el => el.textContent = currentUser.nama);
+        fillProfileForm();
+        renderHabitCards();
+        switchTab('tab-home', document.querySelector('#menu-siswa-container .nav-item'));
+    } else {
+        document.getElementById('menu-admin-container').classList.remove('d-none');
+        document.getElementById('menu-siswa-container').classList.add('d-none');
+        document.getElementById('sidebar-role-title').textContent = adminName || 'Admin';
+        switchTab('tab-admin-dash', document.querySelector('#menu-admin-container .nav-item'));
+    }
+    applyDynamicLogo();
+}
+
+/* ===== LOGOUT ===== */
+function logout() {
+    currentUser = null; currentHabits = {}; currentAdminUsername = '';
+    adminViewingUser = null; adminViewingHabits = null; adminStudentsList = [];
+    selectedReligion = '';
+    try { sessionStorage.removeItem('kaih_session'); } catch(e){}
+    document.getElementById('section-app').classList.add('d-none');
+    document.getElementById('section-login').classList.remove('d-none');
+    document.getElementById('menu-siswa-container').classList.add('d-none');
+    document.getElementById('menu-admin-container').classList.add('d-none');
+    document.querySelectorAll('form').forEach(f => f.reset());
+    document.querySelector('.sidebar')?.classList.remove('show');
+    document.querySelector('.sidebar-overlay')?.classList.remove('show');
+    document.querySelectorAll('input[type="date"]').forEach(inp => inp.value = todayISO());
+    showToast('Berhasil keluar!', 'success');
+}
+
+/* ===== SISWA: PROFIL ===== */
+function fillProfileForm() {
+    if (!currentUser) return;
+    const form = document.getElementById('form-profile-siswa');
+    form.nama.value = currentUser.nama;
+    form.username.value = currentUser.username;
+    form.kelas.value = currentUser.kelas;
+    form.cita_cita.value = currentUser.cita_cita;
+    form.agama.value = currentUser.agama;
+}
+
+/* ===== SISWA: HABIT CARDS ===== */
+function renderHabitCards() {
+    const today = todayISO();
+    const habits = [
+        { key: 'bangun', label: 'Bangun Pagi', emoji: '🌅', color: '#f97316' },
+        { key: 'ibadah', label: 'Beribadah', emoji: '🤲', color: '#8b5cf6' },
+        { key: 'olahraga', label: 'Berolahraga', emoji: '🏃', color: '#10b981' },
+        { key: 'makan', label: 'Makan Sehat', emoji: '🥗', color: '#06b6d4' },
+        { key: 'belajar', label: 'Gemar Belajar', emoji: '📖', color: '#3b82f6' },
+        { key: 'masyarakat', label: 'Bermasyarakat', emoji: '🤝', color: '#ec4899' },
+        { key: 'tidur', label: 'Tidur Cepat', emoji: '🌙', color: '#6366f1' }
+    ];
+    const container = document.getElementById('dashboard-habit-cards');
+    container.innerHTML = habits.map(h => {
+        const list = currentHabits[h.key] || [];
+        const done = list.some(x => x.tgl === today);
+        const total = list.length;
+        // Klik kartu langsung buka modal input
+        let clickAction;
+        if (h.key === 'ibadah') {
+            clickAction = `onclick="openIbadahModal(); new bootstrap.Modal(document.getElementById('modalIbadah')).show();"`;
+        } else {
+            clickAction = `onclick="prepareModal('${h.key}','${h.label}','${h.key==='bangun'||h.key==='tidur'?'Jam':'Detail'}','${h.key==='bangun'||h.key==='tidur'?'time':'text'}'); new bootstrap.Modal(document.getElementById('modalHabit')).show();"`;
+        }
+        return `<div class="col-6 col-md-4 col-lg-3"><div class="card habit-card" ${clickAction}>
+            <div class="habit-icon" style="background: ${h.color};"><span style="font-size:1.3rem;">${h.emoji}</span></div>
+            <div class="habit-label">${h.label}</div>
+            <span class="status-badge ${done ? 'status-done' : 'status-pending'}">${done ? '✅ SELESAI' : '⏳ BELUM'}</span>
+            <div style="font-size:0.7rem; color: var(--text-muted); margin-top:6px;">Total: ${total} entri</div>
+        </div></div>`;
+    }).join('');
+}
+
+/* ===== MODAL HANDLERS ===== */
+function prepareModal(type, title, label, inputType) {
+    document.getElementById('habit-type').value = type;
+    document.getElementById('habit-modal-title').textContent = title;
+    document.getElementById('habit-input-label').textContent = label;
+    const inp = document.getElementById('habit-detail-input');
+    inp.type = inputType;
+    inp.value = '';
+    document.getElementById('habit-date').value = todayISO();
+}
+
+function openIbadahModal() {
+    document.getElementById('ibadah-date').value = todayISO();
+    const container = document.getElementById('religion-selector');
+    container.innerHTML = Object.keys(ibadahData).map(r =>
+        `<div class="religion-chip ${selectedReligion === r ? 'selected' : ''}" onclick="selectReligion('${r}')">${ibadahData[r].emoji} ${r}</div>`
+    ).join('');
+    if (selectedReligion) renderIbadahChecklist(selectedReligion);
+    else document.getElementById('ibadah-dynamic-container').innerHTML = '<p class="text-muted small">Pilih agama terlebih dahulu.</p>';
+}
+
+function selectReligion(religion) {
+    selectedReligion = religion;
+    document.querySelectorAll('.religion-chip').forEach(c => c.classList.toggle('selected', c.textContent.includes(religion)));
+    renderIbadahChecklist(religion);
+}
+
+function renderIbadahChecklist(religion) {
+    const items = ibadahData[religion]?.items || [];
+    document.getElementById('ibadah-dynamic-container').innerHTML =
+        '<label class="form-label fw-bold mt-2">Ibadah yang dilakukan:</label><div class="ibadah-checklist">' +
+        items.map((item, i) =>
+            `<label class="ibadah-check-item" onclick="event.preventDefault(); var cb=this.querySelector('input'); cb.checked=!cb.checked; this.classList.toggle('checked', cb.checked);">
+                <input type="checkbox" name="ibadah_item" value="${escapeHtml(item)}">
+                <div class="ibadah-check-icon">✓</div><span>${escapeHtml(item)}</span>
+            </label>`
+        ).join('') + '</div>';
+}
+
+/* ===== SAVE HABIT ===== */
+document.getElementById('form-dynamic-habit').onsubmit = function(e) {
+    e.preventDefault();
+    const type = document.getElementById('habit-type').value;
+    const tgl = document.getElementById('habit-date').value;
+    const detail1 = document.getElementById('habit-detail-input').value;
+    if (!tgl || !detail1) return;
+    setLoadingBtn('btn-save-habit', true);
+    navigator.geolocation?.getCurrentPosition(
+        pos => doSaveHabit(type, tgl, detail1, '', pos.coords.latitude, pos.coords.longitude),
+        () => doSaveHabit(type, tgl, detail1, '', '-', '-')
+    );
+    if (!navigator.geolocation) doSaveHabit(type, tgl, detail1, '', '-', '-');
+};
+
+document.getElementById('form-ibadah').onsubmit = function(e) {
+    e.preventDefault();
+    const tgl = document.getElementById('ibadah-date').value;
+    const checked = [...document.querySelectorAll('input[name="ibadah_item"]:checked')].map(c => c.value);
+    if (!tgl || checked.length === 0) { showToast('Pilih minimal 1 ibadah!', 'warning'); return; }
+    setLoadingBtn('btn-save-ibadah', true);
+    navigator.geolocation?.getCurrentPosition(
+        pos => doSaveHabit('ibadah', tgl, checked.join(', '), selectedReligion, pos.coords.latitude, pos.coords.longitude),
+        () => doSaveHabit('ibadah', tgl, checked.join(', '), selectedReligion, '-', '-')
+    );
+    if (!navigator.geolocation) doSaveHabit('ibadah', tgl, checked.join(', '), selectedReligion, '-', '-');
+};
+
+function doSaveHabit(type, tgl, detail1, detail2, lat, lng) {
+    google.script.run.withSuccessHandler(function() {
+        setLoadingBtn('btn-save-habit', false); setLoadingBtn('btn-save-ibadah', false);
+        if (!currentHabits[type]) currentHabits[type] = [];
+        currentHabits[type].push({ tgl: tgl, detail1: detail1, detail2: detail2 });
+        renderHabitCards();
+        bootstrap.Modal.getInstance(document.getElementById('modalHabit'))?.hide();
+        bootstrap.Modal.getInstance(document.getElementById('modalIbadah'))?.hide();
+        showToast('Jurnal berhasil disimpan! 🎉', 'success');
+    }).withFailureHandler(function(err) {
+        setLoadingBtn('btn-save-habit', false); setLoadingBtn('btn-save-ibadah', false);
+        showToast('Gagal: ' + err.message, 'danger');
+    }).saveHabit(currentUser.username, type, tgl, detail1, detail2, lat, lng, clientIP);
+}
+
+/* ===== CHANGE PASSWORD: SISWA ===== */
+document.getElementById('form-change-password-siswa').onsubmit = function(e) {
+    e.preventDefault();
+    const form = e.target;
+    const oldP = form.old_pass.value, newP = form.new_pass.value, confP = form.confirm_pass.value;
+    if (newP !== confP) { showToast('Password baru tidak cocok!', 'danger'); return; }
+    if (newP.length < 3) { showToast('Password baru minimal 3 karakter!', 'danger'); return; }
+    setLoadingBtn('btn-change-pass-siswa', true);
+    google.script.run.withSuccessHandler(function(res) {
+        setLoadingBtn('btn-change-pass-siswa', false);
+        if (res.success) { showToast(res.message, 'success'); form.reset(); }
+        else showToast(res.message, 'danger');
+    }).withFailureHandler(function(err) {
+        setLoadingBtn('btn-change-pass-siswa', false);
+        showToast('Error: ' + err.message, 'danger');
+    }).changePasswordSiswa(currentUser.username, oldP, newP);
+};
+
+/* ===== CHANGE PASSWORD: ADMIN ===== */
+document.getElementById('form-change-password-admin').onsubmit = function(e) {
+    e.preventDefault();
+    const form = e.target;
+    const oldP = form.old_pass.value, newP = form.new_pass.value, confP = form.confirm_pass.value;
+    if (newP !== confP) { showToast('Password baru tidak cocok!', 'danger'); return; }
+    if (newP.length < 3) { showToast('Password baru minimal 3 karakter!', 'danger'); return; }
+    setLoadingBtn('btn-change-pass-admin', true);
+    google.script.run.withSuccessHandler(function(res) {
+        setLoadingBtn('btn-change-pass-admin', false);
+        if (res.success) { showToast(res.message, 'success'); form.reset(); }
+        else showToast(res.message, 'danger');
+    }).withFailureHandler(function(err) {
+        setLoadingBtn('btn-change-pass-admin', false);
+        showToast('Error: ' + err.message, 'danger');
+    }).changePasswordAdmin(currentAdminUsername, oldP, newP);
+};
+
+/* ===== ADMIN: DASHBOARD STATUS ===== */
+function fetchAdminDashboard() {
+    const dateStr = todayISO();
+    google.script.run.withSuccessHandler(function(data) {
+        const total = data.length;
+        const lengkap = data.filter(d => d.filled === 7).length;
+        const belum = total - lengkap;
+        const persen = total > 0 ? Math.round(lengkap / total * 100) : 0;
+        document.getElementById('admin-total-siswa').innerText = total;
+        document.getElementById('admin-total-lengkap').innerText = lengkap;
+        document.getElementById('admin-total-belum').innerText = belum;
+        document.getElementById('admin-persen-lengkap').innerText = persen + '%';
+
+        const tbody = document.getElementById('admin-dash-status-list');
+        if (data.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="text-center" style="padding:2rem;color:var(--text-muted);">Belum ada siswa.</td></tr>'; return; }
+        tbody.innerHTML = data.map((d, i) => {
+            const pct = Math.round(d.filled / d.total * 100);
+            const color = d.filled === 7 ? 'var(--success)' : d.filled === 0 ? 'var(--danger)' : 'var(--warning)';
+            const status = d.filled === 7 ? '✅ Lengkap' : ('❌ ' + d.filled + '/7');
+            return `<tr><td>${i+1}</td><td><strong>${escapeHtml(d.nama)}</strong></td><td>${escapeHtml(d.kelas)}</td>
+                <td><span style="color:${color};font-weight:700;">${status}</span></td>
+                <td><div class="progress-mini" style="width:100px;"><div class="progress-mini-bar" style="width:${pct}%;background:${color};"></div></div></td></tr>`;
+        }).join('');
+    }).withFailureHandler(function(err) {
+        showToast('Gagal memuat dashboard: ' + err.message, 'danger');
+    }).getAdminDashboardData(dateStr);
+}
+
+/* ===== ADMIN: TRACKING ===== */
+function loadTrackingAdmin() {
+    const dateStr = document.getElementById('tracker-date').value;
+    const tbody = document.getElementById('tracker-list');
+    tbody.innerHTML = '<tr><td colspan="5" class="text-center">Memuat...</td></tr>';
+    google.script.run.withSuccessHandler(function(data) {
+        if (data.length === 0) { tbody.innerHTML = '<tr><td colspan="5" class="text-center" style="padding:2rem;color:var(--text-muted);">Tidak ada data di tanggal ini.</td></tr>'; return; }
+        tbody.innerHTML = data.map(d =>
+            `<tr><td>${escapeHtml(d.time)}</td><td>${escapeHtml(d.nama)}</td><td>${escapeHtml(d.type)}</td>
+            <td><code>${escapeHtml(d.ip)}</code></td>
+            <td>${d.lat !== '-' ? '<a href="https://www.google.com/maps?q='+d.lat+','+d.lng+'" target="_blank">📍 Lihat</a>' : '-'}</td></tr>`
+        ).join('');
+    }).withFailureHandler(function(err) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center text-danger">Error: ' + escapeHtml(err.message) + '</td></tr>';
+    }).getDailyTrackingAdmin(dateStr);
+}
+
+/* ===== ADMIN: KELOLA SISWA ===== */
+function loadAdminStudents() {
+    const tbody = document.getElementById('admin-siswa-list');
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center">Memuat...</td></tr>';
+    google.script.run.withSuccessHandler(function(res) {
+        adminStudentsList = res;
+        renderSiswaTable(res);
+    }).withFailureHandler(function(err) {
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger">Error</td></tr>';
+    }).getAdminStudents();
+}
+
+function renderSiswaTable(data) {
+    const tbody = document.getElementById('admin-siswa-list');
+    document.getElementById('admin-total-siswa').innerText = data.length;
+    if (data.length === 0) { tbody.innerHTML = '<tr><td colspan="6" class="text-center" style="padding:2rem;color:var(--text-muted);">Belum ada siswa.</td></tr>'; return; }
+    tbody.innerHTML = data.map((s, i) =>
+        `<tr><td>${i+1}</td><td>${escapeHtml(s.nama)}</td><td><code>${escapeHtml(s.username)}</code></td><td>${escapeHtml(s.kelas)}</td><td>${escapeHtml(s.agama)}</td>
+        <td class="text-center">
+            <div class="d-flex gap-1 justify-content-center flex-wrap">
+                <button class="btn btn-sm" style="background:var(--primary-light);color:var(--primary);border-radius:6px;font-size:0.75rem;" onclick="openEditSiswa('${escapeHtml(s.username)}','${escapeHtml(s.nama)}','${escapeHtml(s.kelas)}','${escapeHtml(s.cita_cita || '')}','${escapeHtml(s.agama)}')">✏️</button>
+                <button class="btn btn-sm" style="background:#fef3c7;color:#92400e;border-radius:6px;font-size:0.75rem;" onclick="openResetPass('${escapeHtml(s.username)}','${escapeHtml(s.nama)}')">🔑</button>
+                <button class="btn btn-sm" style="background:#fee2e2;color:#991b1b;border-radius:6px;font-size:0.75rem;" onclick="if(confirm('Hapus siswa ${escapeHtml(s.nama)}?')) deleteSiswa('${escapeHtml(s.username)}')">🗑️</button>
+            </div>
+        </td></tr>`
+    ).join('');
+}
+
+function filterSiswaTable() {
+    const q = document.getElementById('search-siswa').value.toLowerCase();
+    const filtered = adminStudentsList.filter(s => s.nama.toLowerCase().includes(q) || s.username.toLowerCase().includes(q) || s.kelas.toLowerCase().includes(q));
+    renderSiswaTable(filtered);
+}
+
+/* ===== ADMIN: ADD STUDENT ===== */
+document.getElementById('form-admin-add-siswa').onsubmit = function(e) {
+    e.preventDefault();
+    const form = e.target;
+    google.script.run.withSuccessHandler(function(res) {
+        if (!res.success) { showToast(res.message, 'danger'); return; }
+        showToast('Siswa berhasil ditambahkan!', 'success');
+        bootstrap.Modal.getInstance(document.getElementById('modalAddSiswa'))?.hide();
+        form.reset(); form.password.value = '123';
+        loadAdminStudents();
+    }).withFailureHandler(function(err) {
+        showToast('Error: ' + err.message, 'danger');
+    }).addStudent(form.nama.value, form.username.value.toLowerCase(), form.password.value, form.kelas.value, form.cita_cita.value, form.agama.value);
+};
+
+/* ===== ADMIN: EDIT STUDENT ===== */
+function openEditSiswa(username, nama, kelas, cita, agama) {
+    document.getElementById('edit-siswa-username').value = username;
+    document.getElementById('edit-siswa-nama').value = nama;
+    document.getElementById('edit-siswa-kelas').value = kelas;
+    document.getElementById('edit-siswa-cita').value = cita;
+    document.getElementById('edit-siswa-agama').value = agama;
+    new bootstrap.Modal(document.getElementById('modalEditSiswa')).show();
+}
+
+document.getElementById('form-edit-siswa').onsubmit = function(e) {
+    e.preventDefault();
+    const form = e.target;
+    const data = { nama: form.nama.value, kelas: form.kelas.value, cita_cita: form.cita_cita.value, agama: form.agama.value };
+    google.script.run.withSuccessHandler(function(res) {
+        if (res.success) {
+            showToast(res.message, 'success');
+            bootstrap.Modal.getInstance(document.getElementById('modalEditSiswa'))?.hide();
+            loadAdminStudents();
+        } else showToast(res.message, 'danger');
+    }).withFailureHandler(function(err) {
+        showToast('Error: ' + err.message, 'danger');
+    }).editStudent(form.username.value, data);
+};
+
+/* ===== ADMIN: DELETE STUDENT ===== */
+function deleteSiswa(username) {
+    google.script.run.withSuccessHandler(function() {
+        showToast('Siswa berhasil dihapus!', 'success');
+        loadAdminStudents();
+    }).withFailureHandler(function(err) {
+        showToast('Error: ' + err.message, 'danger');
+    }).deleteStudent(username);
+}
+
+/* ===== ADMIN: RESET PASSWORD ===== */
+function openResetPass(username, nama) {
+    document.getElementById('reset-pass-username').value = username;
+    document.getElementById('reset-pass-nama').textContent = nama;
+    document.getElementById('reset-pass-value').value = '123';
+    new bootstrap.Modal(document.getElementById('modalResetPass')).show();
+}
+
+document.getElementById('form-reset-password').onsubmit = function(e) {
+    e.preventDefault();
+    const username = document.getElementById('reset-pass-username').value;
+    const newPass = document.getElementById('reset-pass-value').value;
+    google.script.run.withSuccessHandler(function(res) {
+        if (res.success) {
+            showToast(res.message, 'success');
+            bootstrap.Modal.getInstance(document.getElementById('modalResetPass'))?.hide();
+        } else showToast(res.message, 'danger');
+    }).withFailureHandler(function(err) {
+        showToast('Error: ' + err.message, 'danger');
+    }).resetPasswordSiswa(username, newPass);
+};
+
+/* ===== ADMIN: SETTINGS ===== */
+function fillSettingsForm() {
+    const form = document.getElementById('form-settings-sekolah');
+    ['pemerintah','nama_sekolah','alamat','nama_guru','nip_guru','nama_kepsek','nip_kepsek','tempat_ttd','logo_daerah','deskripsi_login'].forEach(key => {
+        const inp = form.querySelector('[name="' + key + '"]');
+        if (inp) inp.value = schoolSettings[key] || '';
+    });
+}
+
+document.getElementById('form-settings-sekolah').onsubmit = function(e) {
+    e.preventDefault();
+    setLoadingBtn('btn-save-settings', true);
+    const form = e.target;
+    const obj = {};
+    ['pemerintah','nama_sekolah','alamat','nama_guru','nip_guru','nama_kepsek','nip_kepsek','tempat_ttd','logo_daerah','deskripsi_login'].forEach(key => {
+        const inp = form.querySelector('[name="' + key + '"]');
+        if (inp) obj[key] = inp.value;
+    });
+    google.script.run.withSuccessHandler(function() {
+        setLoadingBtn('btn-save-settings', false);
+        schoolSettings = Object.assign(schoolSettings, obj);
+        applyDynamicLogo();
+        applyLoginDeskripsi();
+        showToast('Pengaturan berhasil disimpan!', 'success');
+    }).withFailureHandler(function(err) {
+        setLoadingBtn('btn-save-settings', false);
+        showToast('Error: ' + err.message, 'danger');
+    }).saveAdminSettings(obj);
+};
+
+/* ===== ADMIN: IMPORT CSV ===== */
+document.getElementById('import-csv-file').onchange = function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+        const text = ev.target.result;
+        const lines = text.split(/\r?\n/).filter(l => l.trim());
+        if (lines.length < 2) { showToast('File kosong atau tidak valid!', 'danger'); return; }
+
+        // Auto-detect separator: tab, titik koma, atau koma
+        const firstLine = lines[0];
+        const sep = firstLine.includes('\t') ? '\t' : firstLine.includes(';') ? ';' : ',';
+
+        // Skip header row
+        const header = firstLine.toLowerCase();
+        const startIdx = (header.includes('username') || header.includes('nama')) ? 1 : 0;
+        const existingUsernames = adminStudentsList.map(s => s.username.toLowerCase());
+        const validAgama = ['islam','kristen','katolik','hindu','buddha','konghucu','kepercayaan'];
+
+        parsedImportData = [];
+        let previewHtml = '';
+        let warnCount = 0;
+
+        for (let i = startIdx; i < lines.length; i++) {
+            const cols = lines[i].split(sep).map(c => c.trim().replace(/^"|"$/g, ''));
+            if (cols.length < 3) continue;
+            const uname = (cols[0] || '').toLowerCase().replace(/\s/g, '');
+            const pass = cols[1] || '123';
+            const nama = cols[2] || '';
+            const kelas = cols[3] || '';
+            const cita = cols[4] || '';
+            const agama = cols[5] || '';
+
+            let status = '✅';
+            let statusClass = '';
+            if (!uname || !nama) { status = '⚠️ Username/Nama kosong'; statusClass = 'table-warning'; warnCount++; }
+            else if (existingUsernames.includes(uname)) { status = '⏭️ Sudah ada (skip)'; statusClass = 'table-secondary'; warnCount++; }
+            else if (agama && !validAgama.includes(agama.toLowerCase())) { status = '⚠️ Agama tidak valid'; statusClass = 'table-warning'; warnCount++; }
+
+            parsedImportData.push([uname, pass, nama, kelas, cita, agama]);
+            previewHtml += `<tr class="${statusClass}"><td>${escapeHtml(uname)}</td><td>${escapeHtml(pass)}</td><td>${escapeHtml(nama)}</td><td>${escapeHtml(kelas)}</td><td>${escapeHtml(cita)}</td><td>${escapeHtml(agama)}</td><td>${status}</td></tr>`;
+        }
+
+        document.getElementById('import-count').textContent = parsedImportData.length;
+        document.getElementById('import-preview-body').innerHTML = previewHtml;
+        document.getElementById('import-warnings').innerHTML = warnCount > 0 ? `<p class="small text-warning fw-bold">⚠️ ${warnCount} baris memiliki masalah (akan di-skip atau perlu diperbaiki)</p>` : '';
+        document.getElementById('import-preview-container').classList.remove('d-none');
+    };
+    reader.readAsText(file);
+};
+
+function confirmImport() {
+    if (parsedImportData.length === 0) { showToast('Tidak ada data untuk di-import!', 'danger'); return; }
+    setLoadingBtn('btn-confirm-import', true);
+    google.script.run.withSuccessHandler(function(res) {
+        setLoadingBtn('btn-confirm-import', false);
+        showToast(`Import selesai! Ditambahkan: ${res.added}, Dilewati: ${res.skipped}`, 'success');
+        if (res.errors.length > 0) showToast('Beberapa baris error: ' + res.errors.join('; '), 'warning');
+        bootstrap.Modal.getInstance(document.getElementById('modalImportCSV'))?.hide();
+        document.getElementById('import-csv-file').value = '';
+        document.getElementById('import-preview-container').classList.add('d-none');
+        parsedImportData = [];
+        loadAdminStudents();
+    }).withFailureHandler(function(err) {
+        setLoadingBtn('btn-confirm-import', false);
+        showToast('Error import: ' + err.message, 'danger');
+    }).bulkAddStudents(parsedImportData);
+}
+
+function downloadTemplateCSV() {
+    const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="utf-8"><!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets><x:ExcelWorksheet><x:Name>Template</x:Name><x:WorksheetOptions><x:DisplayGridlines/></x:WorksheetOptions></x:ExcelWorksheet></x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]--></head>
+<body>
+<table border="1">
+<tr style="background:#00A896;color:white;font-weight:bold;">
+  <td>Username</td><td>Password</td><td>Nama</td><td>Kelas</td><td>Cita-cita</td><td>Agama</td>
+</tr>
+<tr><td>andi</td><td>123</td><td>Andi Pratama</td><td>7-A</td><td>Dokter</td><td>Islam</td></tr>
+<tr><td>siti</td><td>123</td><td>Siti Nurhaliza</td><td>7-A</td><td>Guru</td><td>Islam</td></tr>
+<tr><td>budi</td><td>123</td><td>Budi Setiawan</td><td>7-B</td><td>Insinyur</td><td>Kristen</td></tr>
+<tr><td></td><td></td><td></td><td></td><td></td><td></td></tr>
+<tr style="color:gray;font-size:10px;">
+  <td colspan="6">PETUNJUK: Hapus baris contoh di atas, isi data siswa Anda. Lalu simpan sebagai CSV (Save As > CSV) untuk di-import.</td>
+</tr>
+<tr style="color:gray;font-size:10px;">
+  <td>huruf kecil, tanpa spasi</td><td>default: 123</td><td>Nama Lengkap</td><td>contoh: 7-A</td><td>opsional</td><td>Islam/Kristen/Katolik/Hindu/Buddha/Konghucu/Kepercayaan</td>
+</tr>
+</table>
+</body></html>`;
+    const blob = new Blob(['\uFEFF' + html], { type: 'application/vnd.ms-excel' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'Template_Import_Jurnal_7KAIH_Siswa.xls';
+    a.click();
+    showToast('Template berhasil didownload! Buka dengan Excel.', 'success');
+}
+
+/* ===== ADMIN: REPORTS (Tahap 2 — Cetak & Simpan) ===== */
+function onReportModeChange() {
+    const mode = document.getElementById('report-mode').value;
+    document.getElementById('report-siswa-picker').classList.toggle('d-none', mode !== 'siswa');
+    document.getElementById('report-kelas-picker').classList.toggle('d-none', mode !== 'kelas');
+    if (mode === 'kelas') loadClassList();
+    if (mode === 'siswa') loadStudentListForReport();
+}
+
+function loadStudentListForReport() {
+    google.script.run.withSuccessHandler(function(res) {
+        const sel = document.getElementById('admin-report-select-siswa');
+        sel.innerHTML = res.map(s => `<option value="${escapeHtml(s.username)}">${escapeHtml(s.nama)} (${escapeHtml(s.kelas)})</option>`).join('');
+    }).getAdminStudents();
+}
+
+function loadClassList() {
+    google.script.run.withSuccessHandler(function(classes) {
+        const sel = document.getElementById('admin-report-select-kelas');
+        sel.innerHTML = classes.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+    }).getClassList();
+}
+
+document.getElementById('btn-admin-view-report').onclick = function() {
+    const mode = document.getElementById('report-mode').value;
+    const month = parseInt(document.getElementById('admin-report-month').value);
+    const year = parseInt(document.getElementById('admin-report-year').value);
+
+    if (mode === 'siswa') {
+        const username = document.getElementById('admin-report-select-siswa').value;
+        if (!username) { showToast('Pilih siswa terlebih dahulu!', 'warning'); return; }
+        setLoadingBtn('btn-admin-view-report', true);
+        google.script.run.withSuccessHandler(function(data) {
+            setLoadingBtn('btn-admin-view-report', false);
+            adminViewingUser = data.user;
+            adminViewingHabits = data.habits;
+            document.getElementById('report-action-area').classList.remove('d-none');
+            showToast('Data laporan berhasil dimuat!', 'success');
+        }).withFailureHandler(function(err) {
+            setLoadingBtn('btn-admin-view-report', false);
+            showToast('Error: ' + err.message, 'danger');
+        }).getReportForAdmin(username);
+    } else {
+        const kelas = document.getElementById('admin-report-select-kelas').value;
+        if (!kelas) { showToast('Pilih kelas terlebih dahulu!', 'warning'); return; }
+        setLoadingBtn('btn-admin-view-report', true);
+        google.script.run.withSuccessHandler(function(data) {
+            setLoadingBtn('btn-admin-view-report', false);
+            adminViewingUser = { nama: 'Kelas ' + data.kelas, kelas: data.kelas };
+            adminViewingHabits = data;
+            document.getElementById('report-action-area').classList.remove('d-none');
+            showToast('Data kelas ' + data.kelas + ' berhasil dimuat!', 'success');
+        }).withFailureHandler(function(err) {
+            setLoadingBtn('btn-admin-view-report', false);
+            showToast('Error: ' + err.message, 'danger');
+        }).getClassReport(kelas);
+    }
+};
+
+/* ===== PRINT FUNCTIONS ===== */
+const monthNames = ['','Januari','Februari','Maret','April','Mei','Juni','Juli','Agustus','September','Oktober','November','Desember'];
+const habitLabels = { bangun:'Bangun Pagi', ibadah:'Beribadah', olahraga:'Berolahraga', makan:'Makan Sehat', belajar:'Gemar Belajar', masyarakat:'Bermasyarakat', tidur:'Tidur Cepat' };
+
+function showPrintArea(printType) {
+    const mVal = parseInt(document.getElementById('admin-report-month').value);
+    const yVal = parseInt(document.getElementById('admin-report-year').value);
+    const mName = monthNames[mVal];
+    const daysInMonth = new Date(yVal, mVal, 0).getDate();
+
+    // Set print header
+    document.getElementById('print-pemerintah').textContent = schoolSettings.pemerintah || '';
+    document.getElementById('print-sekolah').textContent = schoolSettings.nama_sekolah || '';
+    document.getElementById('print-alamat').textContent = schoolSettings.alamat || '';
+    const logoEl = document.getElementById('print-logo-daerah');
+    if (schoolSettings.logo_daerah) { logoEl.src = schoolSettings.logo_daerah; logoEl.style.display = ''; }
+    else { logoEl.style.display = 'none'; }
+
+    document.getElementById('print-siswa-nama').textContent = adminViewingUser.nama;
+    document.getElementById('print-siswa-kelas').textContent = adminViewingUser.kelas;
+    document.getElementById('print-siswa-bulan').textContent = mName;
+    document.getElementById('print-siswa-tahun').textContent = yVal;
+
+    document.getElementById('print-type-bulanan').classList.add('d-none');
+    document.getElementById('print-type-umum').classList.add('d-none');
+
+    const mode = document.getElementById('report-mode').value;
+
+    if (printType === 'bulanan' && mode === 'siswa') {
+        renderBulananPerSiswa(adminViewingHabits, mVal, yVal, daysInMonth);
+        document.getElementById('print-type-bulanan').classList.remove('d-none');
+    } else if (printType === 'bulanan' && mode === 'kelas') {
+        renderBulananPerKelas(adminViewingHabits, mVal, yVal, daysInMonth);
+        document.getElementById('print-type-bulanan').classList.remove('d-none');
+    } else if (printType === 'umum' && mode === 'siswa') {
+        renderRekapUmum(adminViewingHabits, mVal, yVal, daysInMonth, 'siswa');
+        document.getElementById('print-type-umum').classList.remove('d-none');
+    } else if (printType === 'umum' && mode === 'kelas') {
+        renderRekapPerKelas(adminViewingHabits, mVal, yVal, daysInMonth);
+        document.getElementById('print-type-umum').classList.remove('d-none');
+    }
+
+    document.getElementById('print-container').classList.remove('print-only');
+    document.getElementById('print-container').classList.add('d-block');
+    setTimeout(() => window.print(), 500);
+    setTimeout(() => {
+        document.getElementById('print-container').classList.add('print-only');
+        document.getElementById('print-container').classList.remove('d-block');
+    }, 1000);
+}
+
+function renderBulananPerSiswa(habits, month, year, daysInMonth) {
+    const types = ['bangun','ibadah','olahraga','makan','belajar','masyarakat','tidur'];
+    let html = '';
+    types.forEach((type, idx) => {
+        const list = habits[type] || [];
+        const filtered = list.filter(h => {
+            const parts = h.tgl.split('-');
+            return parseInt(parts[0]) === year && parseInt(parts[1]) === month;
+        });
+        let dayMap = {};
+        filtered.forEach(h => { const d = parseInt(h.tgl.split('-')[2]); dayMap[d] = h.detail1; });
+
+        let rows = '';
+        for (let d = 1; d <= daysInMonth; d++) {
+            rows += `<tr><td class="text-center">${d}</td><td>${escapeHtml(dayMap[d] || '')}</td></tr>`;
+        }
+        const total = Object.keys(dayMap).length;
+        html += `<div style="page-break-inside: avoid; margin-bottom: 1rem;">
+            <h6 class="fw-bold">${idx+1}. ${habitLabels[type]}</h6>
+            <table class="table table-bordered table-sm" style="font-size:11px;"><thead class="table-light"><tr><th width="60">Tgl</th><th>Detail</th></tr></thead><tbody>${rows}</tbody></table>
+            <p class="small text-end"><strong>Total Terisi: ${total}/${daysInMonth} hari</strong></p>
+        </div>`;
+    });
+    document.getElementById('bulanan-tables-container').innerHTML = html;
+}
+
+function renderRekapUmum(habits, month, year, daysInMonth, mode) {
+    const types = ['bangun','ibadah','olahraga','makan','belajar','masyarakat','tidur'];
+
+    if (mode === 'siswa') {
+        let bodyHtml = '', totalPct = 0;
+        types.forEach((type, idx) => {
+            const list = (habits[type] || []).filter(h => {
+                const p = h.tgl.split('-');
+                return parseInt(p[0]) === year && parseInt(p[1]) === month;
+            });
+            const uniqueDays = [...new Set(list.map(h => h.tgl))].length;
+            const pct = Math.round(uniqueDays / daysInMonth * 100);
+            totalPct += pct;
+            const icon = pct >= 85 ? '✅' : pct >= 55 ? '⚠️' : '❌';
+            bodyHtml += `<tr><td>${idx+1}</td><td class="text-start">${habitLabels[type]}</td><td>${uniqueDays}</td><td>${daysInMonth}</td><td><strong>${pct}% ${icon}</strong></td></tr>`;
+        });
+        const avg = Math.round(totalPct / 7);
+        const predikat = avg >= 85 ? 'Sangat Baik (A)' : avg >= 70 ? 'Baik (B)' : avg >= 55 ? 'Cukup (C)' : 'Perlu Bimbingan (D)';
+        bodyHtml += `<tr class="table-light fw-bold"><td colspan="2">RATA-RATA</td><td></td><td></td><td>${avg}%</td></tr>`;
+
+        // Signature
+        const tempat = schoolSettings.tempat_ttd || '';
+        const tglTtd = tempat + ', ' + new Date().getDate() + ' ' + monthNames[new Date().getMonth()+1] + ' ' + new Date().getFullYear();
+
+        // Tulis ulang seluruh container agar tidak bergantung pada child element yang mungkin hilang
+        const tblContainer = document.getElementById('print-type-umum');
+        tblContainer.innerHTML = `
+            <h5 class="fw-bold text-center text-uppercase mb-3">REKAP KESELURUHAN</h5>
+            <table class="table table-bordered border-dark table-sm text-center align-middle" style="font-size: 12px;">
+                <thead class="table-light"><tr><th>No</th><th>Kebiasaan</th><th>Terisi</th><th>Total Hari</th><th>Persentase</th></tr></thead>
+                <tbody>${bodyHtml}</tbody>
+            </table>
+            <div style="margin-top:1rem;padding:1rem;border:1px solid #e2e8f0;border-radius:8px;">
+                <h6 class="fw-bold">📋 Kesimpulan</h6>
+                <p>Predikat: <strong>${predikat}</strong></p>
+                <p class="small text-muted mb-0">Kategori: ≥85% Sangat Baik (A) | 70-84% Baik (B) | 55-69% Cukup (C) | &lt;55% Perlu Bimbingan (D)</p>
+            </div>
+            <div style="display:flex; justify-content:space-between; margin-top:2rem; font-size:12px; page-break-inside:avoid;">
+                <div style="text-align:center; width:45%;">
+                    <p>Mengetahui,<br>Kepala Sekolah</p><br><br><br>
+                    <p style="border-top:1px solid #333; display:inline-block; padding-top:4px;"><strong>${escapeHtml(schoolSettings.nama_kepsek || '')}</strong><br>NIP. ${escapeHtml(schoolSettings.nip_kepsek || '')}</p>
+                </div>
+                <div style="text-align:center; width:45%;">
+                    <p>${tglTtd}<br>Wali Kelas</p><br><br><br>
+                    <p style="border-top:1px solid #333; display:inline-block; padding-top:4px;"><strong>${escapeHtml(schoolSettings.nama_guru || '')}</strong><br>NIP. ${escapeHtml(schoolSettings.nip_guru || '')}</p>
+                </div>
+            </div>
+            <div style="text-align:center; margin-top:1.5rem; font-size:12px; page-break-inside:avoid;">
+                <p>Mengetahui,<br>Orang Tua/Wali</p><br><br><br>
+                <p style="border-top:1px solid #333; display:inline-block; padding-top:4px; min-width:200px;">( ................................. )</p>
+            </div>
+        `;
+    }
+}
+
+/* ===== CETAK PER KELAS: DETAIL BULANAN ===== */
+function renderBulananPerKelas(classData, month, year, daysInMonth) {
+    const types = ['bangun','ibadah','olahraga','makan','belajar','masyarakat','tidur'];
+    const students = classData.students || [];
+    let html = '';
+
+    students.forEach((student, sIdx) => {
+        // Page break antar siswa (kecuali yang pertama)
+        if (sIdx > 0) html += '<div style="page-break-before: always;"></div>';
+
+        html += `<h5 class="fw-bold text-center text-uppercase mb-2">JURNAL 7 KEBIASAAN — DETAIL BULANAN</h5>`;
+        html += `<table style="width:100%;border:none!important;font-size:13px;margin-bottom:12px;"><tr>
+            <td style="border:none!important"><strong>Nama</strong>: ${escapeHtml(student.user.nama)}</td>
+            <td style="border:none!important"><strong>Kelas</strong>: ${escapeHtml(student.user.kelas)}</td>
+        </tr><tr>
+            <td style="border:none!important"><strong>Bulan</strong>: ${monthNames[month]} ${year}</td>
+            <td style="border:none!important"><strong>No</strong>: ${sIdx + 1}/${students.length}</td>
+        </tr></table>`;
+
+        types.forEach(type => {
+            const list = (student.habits[type] || []).filter(h => {
+                const p = h.tgl.split('-');
+                return parseInt(p[0]) === year && parseInt(p[1]) === month;
+            });
+            html += `<div style="margin-bottom:10px;">
+                <h6 style="font-size:13px;font-weight:700;background:#f0f4f8;padding:4px 8px;border-radius:4px;margin-bottom:4px;">${habitLabels[type]}</h6>`;
+            if (list.length === 0) {
+                html += '<p style="font-size:11px;color:#94a3b8;margin:2px 0 6px 8px;">— Belum ada data —</p>';
+            } else {
+                html += '<table class="table table-bordered table-sm" style="font-size:11px;"><thead class="table-light"><tr><th style="width:30px;">No</th><th>Tanggal</th><th>Detail</th><th>Keterangan</th></tr></thead><tbody>';
+                list.forEach((h, i) => {
+                    html += `<tr><td>${i+1}</td><td>${h.tgl}</td><td>${escapeHtml(h.detail1)}</td><td>${escapeHtml(h.detail2)}</td></tr>`;
+                });
+                html += '</tbody></table>';
+            }
+            html += '</div>';
+        });
+    });
+
+    if (students.length === 0) {
+        html = '<p class="text-center text-muted">Tidak ada siswa di kelas ini.</p>';
+    }
+    document.getElementById('bulanan-tables-container').innerHTML = html;
+}
+
+/* ===== CETAK PER KELAS: REKAP RINGKASAN ===== */
+function renderRekapPerKelas(classData, month, year, daysInMonth) {
+    const types = ['bangun','ibadah','olahraga','makan','belajar','masyarakat','tidur'];
+    const students = classData.students || [];
+
+    // Header: tabel dengan kolom per kebiasaan
+    let bodyHtml = '';
+    let grandTotalAvg = 0;
+
+    students.forEach((student, sIdx) => {
+        let rowPct = 0;
+        let cols = '';
+        types.forEach(type => {
+            const list = (student.habits[type] || []).filter(h => {
+                const p = h.tgl.split('-');
+                return parseInt(p[0]) === year && parseInt(p[1]) === month;
+            });
+            const uniqueDays = [...new Set(list.map(h => h.tgl))].length;
+            const pct = Math.round(uniqueDays / daysInMonth * 100);
+            rowPct += pct;
+            const icon = pct >= 85 ? '✅' : pct >= 55 ? '⚠️' : pct > 0 ? '❌' : '-';
+            cols += `<td>${pct > 0 ? pct + '%' : '-'}</td>`;
+        });
+        const avg = Math.round(rowPct / 7);
+        grandTotalAvg += avg;
+        const predikat = avg >= 85 ? 'A' : avg >= 70 ? 'B' : avg >= 55 ? 'C' : 'D';
+        bodyHtml += `<tr><td>${sIdx+1}</td><td class="text-start">${escapeHtml(student.user.nama)}</td>${cols}<td><strong>${avg}%</strong></td><td><strong>${predikat}</strong></td></tr>`;
+    });
+
+    const classAvg = students.length > 0 ? Math.round(grandTotalAvg / students.length) : 0;
+    bodyHtml += `<tr class="table-light fw-bold"><td colspan="2">RATA-RATA KELAS</td><td colspan="7"></td><td>${classAvg}%</td><td>${classAvg >= 85 ? 'A' : classAvg >= 70 ? 'B' : classAvg >= 55 ? 'C' : 'D'}</td></tr>`;
+
+    document.getElementById('table-body-umum').innerHTML = '';
+    document.getElementById('kesimpulan-area').innerHTML = '';
+    document.getElementById('signature-area-umum').innerHTML = '';
+
+    // Ganti tabel umum dengan tabel kelas
+    const tblContainer = document.getElementById('print-type-umum');
+    tblContainer.innerHTML = `
+        <h5 class="fw-bold text-center text-uppercase mb-3">REKAP JURNAL 7 KEBIASAAN — ${escapeHtml(classData.kelas)}</h5>
+        <p class="text-center" style="font-size:12px;">Bulan: ${monthNames[month]} ${year} | Jumlah Siswa: ${students.length}</p>
+        <div class="table-responsive">
+        <table class="table table-bordered border-dark table-sm text-center align-middle" style="font-size:11px;">
+            <thead class="table-light">
+                <tr>
+                    <th rowspan="2">No</th><th rowspan="2" class="text-start">Nama Siswa</th>
+                    <th colspan="7">Persentase Kebiasaan</th>
+                    <th rowspan="2">Rata²</th><th rowspan="2">Nilai</th>
+                </tr>
+                <tr>
+                    <th style="font-size:9px;">Bangun</th><th style="font-size:9px;">Ibadah</th>
+                    <th style="font-size:9px;">Olahraga</th><th style="font-size:9px;">Makan</th>
+                    <th style="font-size:9px;">Belajar</th><th style="font-size:9px;">Sosial</th>
+                    <th style="font-size:9px;">Tidur</th>
+                </tr>
+            </thead>
+            <tbody>${bodyHtml}</tbody>
+        </table>
+        </div>
+        <div style="margin-top:1rem;padding:1rem;border:1px solid #e2e8f0;border-radius:8px;">
+            <h6 class="fw-bold">📋 Keterangan Predikat</h6>
+            <p class="small text-muted mb-0">A = ≥85% (Sangat Baik) | B = 70-84% (Baik) | C = 55-69% (Cukup) | D = <55% (Perlu Bimbingan)</p>
+        </div>
+        <div style="display:flex; justify-content:space-between; margin-top:2rem; font-size:12px; page-break-inside:avoid;">
+            <div style="text-align:center; width:45%;">
+                <p>Mengetahui,<br>Kepala Sekolah</p><br><br><br>
+                <p style="border-top:1px solid #333; display:inline-block; padding-top:4px;"><strong>${escapeHtml(schoolSettings.nama_kepsek || '')}</strong><br>NIP. ${escapeHtml(schoolSettings.nip_kepsek || '')}</p>
+            </div>
+            <div style="text-align:center; width:45%;">
+                <p>${escapeHtml(schoolSettings.tempat_ttd || '')}, ${new Date().getDate()} ${monthNames[new Date().getMonth()+1]} ${new Date().getFullYear()}<br>Wali Kelas</p><br><br><br>
+                <p style="border-top:1px solid #333; display:inline-block; padding-top:4px;"><strong>${escapeHtml(schoolSettings.nama_guru || '')}</strong><br>NIP. ${escapeHtml(schoolSettings.nip_guru || '')}</p>
+            </div>
+        </div>
+    `;
+}
+
+/* ===== SAVE REPORT TO SHEET ===== */
+function saveCurrentReportToSheet() {
+    const mode = document.getElementById('report-mode').value;
+    const mVal = parseInt(document.getElementById('admin-report-month').value);
+    const yVal = parseInt(document.getElementById('admin-report-year').value);
+    const mName = monthNames[mVal];
+    const daysInMonth = new Date(yVal, mVal, 0).getDate();
+    const types = ['bangun','ibadah','olahraga','makan','belajar','masyarakat','tidur'];
+
+    let sheetName, rows;
+
+    if (!adminViewingUser || !adminViewingHabits) {
+        showToast('Tarik data terlebih dahulu!', 'warning');
+        return;
+    }
+
+    if (mode === 'siswa') {
+        const cleanName = adminViewingUser.nama.replace(/\s+/g, '');
+        sheetName = 'Lap_' + cleanName + '_' + mName.substring(0,3) + yVal;
+        rows = [['No', 'Kebiasaan', 'Terisi', 'Total Hari', 'Persentase']];
+        let totalPct = 0;
+        types.forEach((type, idx) => {
+            const list = (adminViewingHabits[type] || []).filter(h => {
+                const p = h.tgl.split('-');
+                return parseInt(p[0]) === yVal && parseInt(p[1]) === mVal;
+            });
+            const uniqueDays = [...new Set(list.map(h => h.tgl))].length;
+            const pct = Math.round(uniqueDays / daysInMonth * 100);
+            totalPct += pct;
+            rows.push([idx+1, habitLabels[type], uniqueDays, daysInMonth, pct + '%']);
+        });
+        const avg = Math.round(totalPct / 7);
+        rows.push(['', 'RATA-RATA', '', '', avg + '%']);
+        rows.push([]);
+        rows.push(['Nama', adminViewingUser.nama]);
+        rows.push(['Kelas', adminViewingUser.kelas]);
+        rows.push(['Bulan', mName + ' ' + yVal]);
+        const predikat = avg >= 85 ? 'Sangat Baik (A)' : avg >= 70 ? 'Baik (B)' : avg >= 55 ? 'Cukup (C)' : 'Perlu Bimbingan (D)';
+        rows.push(['Predikat', predikat]);
+    } else if (mode === 'kelas') {
+        const students = adminViewingHabits.students || [];
+        sheetName = 'Lap_' + adminViewingHabits.kelas.replace(/\s+/g,'') + '_' + mName.substring(0,3) + yVal;
+        rows = [['No', 'Nama Siswa', 'Bangun Pagi', 'Beribadah', 'Berolahraga', 'Makan Sehat', 'Gemar Belajar', 'Bermasyarakat', 'Tidur Cepat', 'Rata-Rata', 'Predikat']];
+        students.forEach((s, sIdx) => {
+            let rowPct = 0;
+            let cols = [];
+            types.forEach(type => {
+                const list = (s.habits[type] || []).filter(h => {
+                    const p = h.tgl.split('-');
+                    return parseInt(p[0]) === yVal && parseInt(p[1]) === mVal;
+                });
+                const uniqueDays = [...new Set(list.map(h => h.tgl))].length;
+                const pct = Math.round(uniqueDays / daysInMonth * 100);
+                rowPct += pct;
+                cols.push(pct + '%');
+            });
+            const avg = Math.round(rowPct / 7);
+            const predikat = avg >= 85 ? 'A' : avg >= 70 ? 'B' : avg >= 55 ? 'C' : 'D';
+            rows.push([sIdx+1, s.user.nama, ...cols, avg + '%', predikat]);
+        });
+        rows.push([]);
+        rows.push(['Kelas', adminViewingHabits.kelas]);
+        rows.push(['Bulan', mName + ' ' + yVal]);
+        rows.push(['Jumlah Siswa', students.length]);
+    }
+
+    if (confirm('Simpan laporan ke sheet baru "' + sheetName + '"?')) {
+        google.script.run.withSuccessHandler(function(res) {
+            if (res.success) showToast('Disimpan ke sheet: ' + res.sheetName, 'success');
+            else showToast('Gagal menyimpan', 'danger');
+        }).withFailureHandler(function(err) {
+            showToast('Error: ' + err.message, 'danger');
+        }).saveReportToSheet(sheetName, rows);
+    }
+}
+
+/* ===== INIT: Load student list for reports on first load ===== */
+(function() {
+    const origSwitchTab = window.switchTab;
+    const reportLoaded = { siswa: false };
+    window.switchTab = function(tabId, btn) {
+        origSwitchTab(tabId, btn);
+        if (tabId === 'tab-admin-reports' && !reportLoaded.siswa) {
+            reportLoaded.siswa = true;
+            loadStudentListForReport();
+        }
+        if (tabId === 'tab-admin-settings') fillSettingsForm();
+    };
+})();
+</script>
